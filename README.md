@@ -24,3 +24,9 @@ go mod tidy
 ```
 
 Then set up your configuration data in `data/config.json` and your proxies.
+
+And run:
+
+```
+go run sniper.go
+```
