@@ -30,3 +30,7 @@ And run:
 ```
 go run sniper.go
 ```
+
+# Future 
+
+- [ ] Rust version?
