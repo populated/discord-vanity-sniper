@@ -31,6 +31,8 @@ And run:
 go run sniper.go
 ```
 
+![preview](https://cdn.uploader.tech/403/p67Rh7bRJ.png)
+
 # Future 
 
 - [ ] Rust version?
