@@ -22,13 +22,13 @@ type Config struct {
 }
 
 type Sniper struct {
-	config  Config
-	client  *http.Client
-	atts    int
-	snipe   bool
-	proxies []string
-	mu      sync.Mutex
-	start   time.Time
+	config   Config
+	client   *http.Client
+	atts     int
+	snipe    bool
+	proxies  []string
+	mu       sync.Mutex
+	start    time.Time
 	proxyIdx int
 }
 
@@ -134,7 +134,7 @@ func (s *Sniper) snipeVanity(workerID int, results chan<- bool, wg *sync.WaitGro
 
 		if resp.StatusCode == http.StatusNotFound {
 			s.snipe = false
-			results <- true 
+			results <- true
 			resp.Body.Close()
 			break
 		}
@@ -142,7 +142,7 @@ func (s *Sniper) snipeVanity(workerID int, results chan<- bool, wg *sync.WaitGro
 		resp.Body.Close()
 	}
 
-	results <- false 
+	results <- false
 }
 
 func (s *Sniper) claim() {
@@ -156,6 +156,7 @@ func (s *Sniper) claim() {
 	for key, value := range s.headers() {
 		req.Header.Set(key, value)
 	}
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
