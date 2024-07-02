@@ -32,6 +32,11 @@ type Sniper struct {
 	proxyIdx int
 }
 
+type ErrorResponse struct {
+	Message string `json:"message"`
+	Code    int    `json:"code"`
+}
+
 func NewSniper() *Sniper {
 	configFile, err := os.Open("./data/config.json")
 	if err != nil {
@@ -131,12 +136,16 @@ func (s *Sniper) snipeVanity(workerID int, results chan<- bool, wg *sync.WaitGro
 			fmt.Println(aurora.Yellow(fmt.Sprintf("WARNING [Worker %d]: Failed to snipe vanity after %d attempts. Continuing... RPS: %.2f", workerID, s.atts, rps)))
 		}
 		s.mu.Unlock()
-
-		if resp.StatusCode == http.StatusNotFound {
-			s.snipe = false
-			results <- true
-			resp.Body.Close()
-			break
+		
+		body, err := ioutil.ReadAll(resp.Body)
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			if errorResp.Message == "Unknown Invite" && errorResp.Code == 10006 {
+				s.snipe = false
+				results <- true
+				resp.Body.Close()
+				break
+			}
 		}
 
 		resp.Body.Close()
