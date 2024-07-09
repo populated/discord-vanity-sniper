@@ -31,7 +31,7 @@ And run:
 go run sniper.go
 ```
 
-![preview](https://cdn.uploader.tech/403/p67Rh7bRJ.png)
+![preview](https://github.com/alluding/discord-vanity-sniper/assets/149972831/82a4b9ae-ec94-4b5b-b645-7ee9ba7ea7e5)
 
 # Future 
 
