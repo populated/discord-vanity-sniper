@@ -104,6 +104,9 @@ func (s *Sniper) headers() map[string]string {
 func (s *Sniper) snipeVanity(workerID int, results chan<- bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	// I have no clue why /invites/%s is being proxied, considering it has a global rate limit.
+	// So even if it's proxied, it doesn't matter.
+
 	for s.snipe {
 		req, err := http.NewRequest("GET", fmt.Sprintf("https://discord.com/api/v9/invites/%s", s.config.Vanity), nil)
 		if err != nil {
