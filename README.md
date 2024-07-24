@@ -13,7 +13,7 @@
 Clone the repo:
 
 ```
-git clone https://github.com/alluding/discord-vanity-sniper.git
+git clone https://github.com/populated/discord-vanity-sniper.git
 cd discord-vanity-sniper
 ```
 
