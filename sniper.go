@@ -3,15 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/logrusorgru/aurora"
+	"github.com/valyala/fasthttp"
 )
 
 type Config struct {
@@ -23,13 +20,11 @@ type Config struct {
 
 type Sniper struct {
 	config   Config
-	client   *http.Client
+	client   *fasthttp.Client
 	atts     int
 	snipe    bool
-	proxies  []string
 	mu       sync.Mutex
 	start    time.Time
-	proxyIdx int
 }
 
 type ErrorResponse struct {
@@ -51,37 +46,10 @@ func NewSniper() *Sniper {
 		os.Exit(1)
 	}
 
-	proxies, err := ioutil.ReadFile("./data/proxies.txt")
-	if err != nil {
-		fmt.Println("Error reading proxies file:", err)
-		os.Exit(1)
-	}
-
 	return &Sniper{
-		config:  config,
-		client:  &http.Client{},
-		snipe:   true,
-		proxies: strings.Split(string(proxies), "\n"),
-	}
-}
-
-func (s *Sniper) createClient() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if len(s.proxies) > 0 {
-		proxyURL, err := url.Parse(s.proxies[s.proxyIdx])
-		if err != nil {
-			fmt.Println("Error parsing proxy URL:", err)
-			return
-		}
-		s.client.Transport = &http.Transport{
-			Proxy:               http.ProxyURL(proxyURL),
-			MaxIdleConns:        1000,
-			MaxIdleConnsPerHost: 1000,
-			IdleConnTimeout:     30 * time.Second,
-		}
-		s.proxyIdx = (s.proxyIdx + 1) % len(s.proxies)
+		config: config,
+		client: &fasthttp.Client{},
+		snipe:  true,
 	}
 }
 
@@ -104,28 +72,26 @@ func (s *Sniper) headers() map[string]string {
 func (s *Sniper) snipeVanity(workerID int, results chan<- bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// I have no clue why /invites/%s is being proxied, considering it has a global rate limit.
-	// So even if it's proxied, it doesn't matter.
-
 	for s.snipe {
-		req, err := http.NewRequest("GET", fmt.Sprintf("https://discord.com/api/v9/invites/%s", s.config.Vanity), nil)
-		if err != nil {
-			fmt.Println("Error creating request:", err)
-			continue
-		}
+		req := fasthttp.AcquireRequest()
+		resp := fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseRequest(req)
+		defer fasthttp.ReleaseResponse(resp)
+
+		req.SetRequestURI(fmt.Sprintf("https://discord.com/api/v9/invites/%s", s.config.Vanity))
+		req.Header.SetMethod("GET")
 
 		for key, value := range s.headers() {
 			req.Header.Set(key, value)
 		}
 
-		var resp *http.Response
+		var err error
 		for retries := 0; retries < 3; retries++ {
-			resp, err = s.client.Do(req)
+			err = s.client.Do(req, resp)
 			if err == nil {
 				break
 			}
 			fmt.Println("Error making request:", err)
-			s.createClient()
 		}
 		if err != nil {
 			continue
@@ -139,45 +105,44 @@ func (s *Sniper) snipeVanity(workerID int, results chan<- bool, wg *sync.WaitGro
 			fmt.Println(aurora.Yellow(fmt.Sprintf("WARNING [Worker %d]: Failed to snipe vanity after %d attempts. Continuing... RPS: %.2f", workerID, s.atts, rps)))
 		}
 		s.mu.Unlock()
-		
-		body, err := ioutil.ReadAll(resp.Body)
+
+		body := resp.Body()
 		var errorResp ErrorResponse
 		if err := json.Unmarshal(body, &errorResp); err == nil {
 			if errorResp.Message == "Unknown Invite" && errorResp.Code == 10006 {
 				s.snipe = false
 				results <- true
-				resp.Body.Close()
 				break
 			}
 		}
-
-		resp.Body.Close()
 	}
 
 	results <- false
 }
 
 func (s *Sniper) claim() {
-	reqBody := strings.NewReader(fmt.Sprintf(`{"code": "%s"}`, s.config.Vanity))
-	req, err := http.NewRequest("PATCH", fmt.Sprintf("https://discord.com/api/v9/guilds/%d/vanity-url", s.config.Guild), reqBody)
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return
-	}
+	req := fasthttp.AcquireRequest()
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseRequest(req)
+	defer fasthttp.ReleaseResponse(resp)
+
+	req.SetRequestURI(fmt.Sprintf("https://discord.com/api/v9/guilds/%d/vanity-url", s.config.Guild))
+	req.Header.SetMethod("PATCH")
+	req.Header.SetContentType("application/json")
 
 	for key, value := range s.headers() {
 		req.Header.Set(key, value)
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.Do(req)
+	req.SetBodyString(fmt.Sprintf(`{"code": "%s"}`, s.config.Vanity))
+
+	err := s.client.Do(req, resp)
 	if err != nil {
 		fmt.Println("Error making request:", err)
 		return
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusOK {
+	if resp.StatusCode() == fasthttp.StatusOK {
 		elapsed := time.Since(s.start)
 		fmt.Println(aurora.Magenta(fmt.Sprintf("SUCCESS: Vanity successfully sniped. - vanity=%s - attempts=%d - time=%s", s.config.Vanity, s.atts, elapsed)))
 	} else {
@@ -211,6 +176,5 @@ func (s *Sniper) run() {
 
 func main() {
 	sniper := NewSniper()
-	sniper.createClient()
 	sniper.run()
 }
